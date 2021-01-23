@@ -26,10 +26,18 @@ var (
 	RedirectUri = "http://localhost:3835/oauth/callback"
 )
 
+type APIError struct {
+	ErrorMessage string
+}
+
+func (m *APIError) Error() string {
+	return m.ErrorMessage
+}
+
 var Timeout int64 = 0
 var CustomEndpoint = ``
 var SessionExpiredError = errors.New("Session expired")
-var APILimitExceededError = errors.New("API limit exceeded")
+var APILimitExceededError = &APIError{"API limit exceeded"}
 var ClassNotFoundError = errors.New("class not found")
 var MetricsNotFoundError = errors.New("metrics not found")
 var DevHubOrgRequiredError = errors.New("Org must be a Dev Hub")
@@ -1180,23 +1188,25 @@ func (f *Force) httpGetRequest(url string, headers map[string]string) (body []by
 		if res.StatusCode/100 != 2 {
 			var messages []ForceError
 			json.Unmarshal(body, &messages)
-			if len(messages) > 0 && messages[0].ErrorCode == "REQUEST_LIMIT_EXCEEDED" {
-				err = APILimitExceededError
-			} else if len(messages) > 0 {
-				err = errors.New(messages[0].Message)
-			} else {
+			switch {
+			case len(messages) == 0:
 				err = errors.New(string(body))
+			case messages[0].ErrorCode == "REQUEST_LIMIT_EXCEEDED":
+				err = APILimitExceededError
+			case messages[0].ErrorCode == "INVALID_OPERATION":
+				// e.g. "The requested operation is not yet supported by this
+				// SObject storage type, contact salesforce.com support for more
+				// information."
+				err = &APIError{"Invalid Operation: " + messages[0].Message}
+			default:
+				err = errors.New(messages[0].Message)
 			}
 		}
 	}
 
-	if res.StatusCode == 401 || (res.StatusCode == 403 && err != APILimitExceededError) {
+	_, isAPIError := err.(*APIError)
+	if res.StatusCode == 401 || (res.StatusCode == 403 && !isAPIError) {
 		err = SessionExpiredError
-		return
-	}
-
-	if err != nil {
-		return
 	}
 
 	return
