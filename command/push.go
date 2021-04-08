@@ -324,13 +324,27 @@ func pushByMetadataType() {
 	if filepath.Base(metaFolder) == "aura" || filepath.Base(metaFolder) == "lwc" {
 		cur := ""
 		filepath.Walk(metaFolder, func(path string, f os.FileInfo, err error) error {
-			if f.IsDir() && cur != f.Name() {
-				cur = f.Name()
-				fmt.Printf("Pushing " + f.Name() + "\n")
-			}
 			if (f.Name() != "aura" && f.Name() != "lwc") && strings.ToLower(f.Name()) != ".ds_store" && f.IsDir() {
-				absPath, _ := filepath.Abs(path)
-				pushAuraComponentByPath(absPath)
+				if len(metadataName) == 0 {
+					if f.IsDir() && cur != f.Name() {
+						cur = f.Name()
+						fmt.Printf("Pushing " + f.Name() + "\n")
+					}
+					absPath, _ := filepath.Abs(path)
+					pushAuraComponentByPath(absPath)
+				} else {
+					for _, name := range metadataName {
+						// Check to see if the resource name matches the one of the ones passed on the -name flag
+						if f.Name() == name {
+							if f.IsDir() && cur != f.Name() {
+								cur = f.Name()
+								fmt.Printf("Pushing " + f.Name() + "\n")
+							}
+							absPath, _ := filepath.Abs(path)
+							pushAuraComponentByPath(absPath)
+						}
+					}
+				}
 			}
 			return nil
 		})
